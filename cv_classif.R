@@ -1,5 +1,6 @@
 require(MASS)
 library(e1071)
+library(class)
 
 #fonction réalisant la validation croisée (avec K=10 par défaut) 
 CV_eval <- function(model, data, hyperparameters=c(), fold=10){
@@ -30,12 +31,12 @@ CV_eval <- function(model, data, hyperparameters=c(), fold=10){
       mean <- mean + (errors[k]*length(pred))
     }else if (model=='knn'){
       neigh <- hyperparameters$K
-      train <- data[folds!=k,]
+      train <- data[folds!=k, -which(names(data)=="y")]
       train$y <- NULL 
       cl <- as.factor(data[folds!=k,]$y)
-      test <- data[folds==k,]
+      test <- data[folds==k, -which(names(data)=="y")]
       test$y <- NULL
-      model.pred <- knn(train=data[folds!=k,], test=data[folds==k,], cl=cl, k=neigh)
+      model.pred <- knn(train=train, test=test, cl=cl, k=neigh)
       errors[k] <- sum(data$y[folds==k]!=model.pred) / length(model.pred)
       mean <- mean + (errors[k]*length(model.pred))
     }else{
