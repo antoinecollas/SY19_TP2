@@ -1,0 +1,47 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+source(file="cv_classif.R")
+```
+# Astronomy
+## Chargement des données
+```{r}
+astronomy <- read.table('astronomy_train.csv', sep = ",", header = TRUE)
+astronomy <- astronomy[,-1] #on retire l'objid
+colnames(astronomy)[11] <- "y"
+nrow(astronomy)
+```
+## Séparation des données en entrainement/test
+```{r}
+set.seed(42)
+train_size <- nrow(astronomy) * (2/3)
+train <- sample(1:nrow(astronomy), size = train_size)
+astronomy_train <- astronomy[train,]
+nrow(astronomy_train)
+ncol(astronomy_train)
+astronomy_train
+```
+
+## Présentation des données
+Classification: 3 classes
+Nombre d'individus: 5000
+Nombre de variables: 13
+
+```{r}
+set.seed(123)
+#validation croisée sur l'ensemble d'entrainement
+res <- data.frame("Erreur"=rep(0,3), "Ecart type"=rep(0,3))
+print(dim(res))
+res[1,] <- CV_eval('adl', astronomy_train)
+res[2,] <- CV_eval('adq', astronomy_train)
+res[3,] <- CV_eval('bayesien_naif', astronomy_train)
+colnames(res) <- c("Erreur", "Ecart type")
+row.names(res) <- c("ADL", "ADQ", "Bayesien naif")
+```
+Nous obtenons les erreurs suivantes:
+
+```{r, echo=FALSE}
+knitr::kable(res)
+```

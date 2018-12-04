@@ -1,3 +1,6 @@
+*.nb.html
+data/*
+
 # History files
 .Rhistory
 .Rapp.history
