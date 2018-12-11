@@ -9,10 +9,36 @@ source(file="cv_classif.R")
 ## Chargement des données
 ```{r}
 astronomy <- read.table('data/astronomy_train.csv', sep = ",", header = TRUE)
-astronomy <- astronomy[,-1] #on retire l'objid
-colnames(astronomy)[11] <- "y"
+colnames(astronomy)[14] <- "y"
+ncol(astronomy)
 nrow(astronomy)
 ```
+## Présentation des données
+Classification: 3 classes
+Nombre d'individus: 5000
+Nombre de variables: 17
+Toutes les variables sont quantitatives.
+
+Les variables 'objid' et 'rerun' n'ont qu'une seule valeur. Nous les retirons puiqu'elles ne nous servirons pas à discriminer les 3 classes.
+```{r}
+for (colname in colnames(astronomy)){
+  if (length(unique(astronomy[,colname])) < 10) {
+    print(colname)
+    print(length(unique(astronomy[,colname])))
+  }
+}
+astronomy <- astronomy[,-which(names(astronomy)=="objid")]
+astronomy <- astronomy[,-which(names(astronomy)=="rerun")]
+astronomy
+```
+
+Nous centrons et réduisons les variables. En effet certaines variables comme 'specobjid' sont en 1O^18 alors que d'autres variables sont en 10^-4 comme 'redshift'.
+```{r}
+astronomy <- cbind(data.frame(scale(astronomy[,-which(names(astronomy)=="y")], center = TRUE, scale = TRUE)), astronomy[,which(names(astronomy)=="y")])
+colnames(astronomy)[ncol(astronomy)] <- "y"
+astronomy
+```
+
 ## Séparation des données en entrainement/test
 ```{r}
 set.seed(42)
@@ -21,14 +47,7 @@ train <- sample(1:nrow(astronomy), size = train_size)
 astronomy_train <- astronomy[train,]
 nrow(astronomy_train)
 ncol(astronomy_train)
-astronomy_train
 ```
-
-## Présentation des données
-Classification: 3 classes
-Nombre d'individus: 5000
-Nombre de variables: 13
-
 
 ##Analyses discriminantes
 ```{r}
