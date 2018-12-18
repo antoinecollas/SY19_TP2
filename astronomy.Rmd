@@ -12,6 +12,7 @@ astronomy <- read.table('data/astronomy_train.csv', sep = ",", header = TRUE)
 colnames(astronomy)[14] <- "y"
 ncol(astronomy)
 nrow(astronomy)
+table(astronomy["y"])
 ```
 ## Présentation des données
 Classification: 3 classes
@@ -40,6 +41,7 @@ astronomy
 ```
 
 ## Séparation des données en entrainement/test
+Nous séparons les données en un ensemble d'entrainement sur lequel nous allons tester tout nos modèles et un ensemble de test qui nous permettra d'évaluer l'erreur pour le modèle que nous aurons retenu. Avant de conserver la même séparation des données à chaque execution du notebook nous fixons le générateur de nombre aléatoires (seed).
 ```{r}
 set.seed(42)
 train_size <- nrow(astronomy) * (2/3)
@@ -59,6 +61,75 @@ res[2,] <- CV_eval('adq', astronomy_train)
 res[3,] <- CV_eval('bayesien_naif', astronomy_train)
 colnames(res) <- c("Erreur", "Ecart type")
 row.names(res) <- c("ADL", "ADQ", "Bayesien naif")
+```
+Nous obtenons les erreurs suivantes:
+
+```{r, echo=FALSE}
+knitr::kable(res)
+```
+L'analyse discriminante quadratique est l'algorithme le plus performant des trois modèles testés précédemments. Les modèles plus complexes fonctionnent donc bien sur ce jeu de données. Nous testons donc SVM avec différents noyaux.
+
+#SVM
+
+Les SVM ont l'hyperparamètre C: si C est faible alors le SVM aura une large marge quitte à mal classer certains points (on peut dans ce cas se retrouver dans un cas de sous entrainement). De manière opposé, si C est grand alors le SVM classifira bien beaucoup de points mais aura une faible marge et donc risque un sur entrainement. Nous cherchons le meilleur compromis.
+
+Nous cherchons l'hyperparamètre C minimisant l'erreur de classification pour un noyau linéaire.
+
+##Optimisation C
+```{r}
+set.seed(123)
+C_err_min <- 0
+C_liste <- (1:5)^5
+erreurs_C <- rep(0, length(C_liste))
+for (i in 1:length(C_liste)){
+  print(C_liste[i])
+  hyperparametres <- list(kernel="vanilla", C=C_liste[i], kpar=list())
+  erreurs_C[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+}
+```
+```{r}
+plot(C_liste, erreurs_C)
+C <- C_liste[which.min(erreurs_C)]
+```
+
+##SVM à noyaux
+Les différents noyaux vont nous permettre de trouver des fontières de décision non linéaires.
+
+Nous testons trois noyaux pour les SVM:
+- noyau linéaire ('vanilladot') qui n'a pas d'hyperparamètres
+- noyau polynomial pour lequel il faut régler le degré du noyau. Nous testons cet hyperparamètre pour des valeurs de 2 à 5. Nous retenons le degré donnant la plus faible erreur par validation croisée.
+- noyau gaussien
+
+L'idéal serait d'optimiser C pour différents noyaux. Cependant chaque noyau possède d'autres hyperparamètres et essayer toutes les combinaisons se révèle trop couteux en calculs. Par conséquent nous conservons la valeur trouvée avec le noyau linéaire.
+
+```{r}
+set.seed(123)
+degre_err_min <- 0
+degres <- 2:5 
+erreurs_degres <- rep(0, length(degres)) 
+for (i in 1:length(degres)){
+  print(degres[i])
+  hyperparametres <- list(kernel="polydot", kpar=list(degree=degres[i]), C=C)
+  erreurs_degres[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+}
+plot(degres, erreurs_degres)
+```
+```{r}
+set.seed(123)
+res <- data.frame("Erreur"=rep(Inf,3), "Ecart type"=rep(Inf,3))
+
+#validation croisée sur l'ensemble d'entrainement
+#noyau linéaire
+hyperparametres <- list(kernel="vanilladot", kpar=list(), C=C)
+res[1,] <- CV_eval('svc', astronomy_train, hyperparametres)
+#noyau polynomial
+hyperparametres <- list(kernel="polydot", kpar=list(degree=which.min(erreurs_degres)), C=C)
+res[2,] <- CV_eval('svc', astronomy_train, hyperparametres)
+#noyau rbf
+hyperparametres <- list(kernel="rbfdot", kpar=list(), C=C)
+res[3,] <- CV_eval('svc', astronomy_train, hyperparametres)
+colnames(res) <- c("Erreur", "Ecart type")
+row.names(res) <- c("vanilla", "poly", "rbf")
 ```
 Nous obtenons les erreurs suivantes:
 

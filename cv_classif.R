@@ -1,6 +1,7 @@
 require(MASS)
 library(e1071)
 library(class)
+library(kernlab)
 
 #fonction réalisant la validation croisée (avec K=10 par défaut) 
 CV_eval <- function(model, data, hyperparameters=c(), fold=10){
@@ -38,6 +39,17 @@ CV_eval <- function(model, data, hyperparameters=c(), fold=10){
       test$y <- NULL
       model.pred <- knn(train=train, test=test, cl=cl, k=neigh)
       errors[k] <- sum(data$y[folds==k]!=model.pred) / length(model.pred)
+      mean <- mean + (errors[k]*length(model.pred))
+    }else if (model=='svc'){
+      kernel <- hyperparameters$kernel
+      kpar <- hyperparameters$kpar
+      C <- hyperparameters$C
+      train <- data[folds!=k, ]
+      model.fit <- ksvm(y~., data=train, type="C-svc", kernel=kernel, kpar=kpar, C=C, cross=0)
+      test_x <- data[folds==k, -which(names(data)=="y")]
+      test_y <- as.factor(data[folds==k,]$y)
+      model.pred <- predict(model.fit, test_x)
+      errors[k] <- sum(test_y!=model.pred) / length(model.pred)
       mean <- mean + (errors[k]*length(model.pred))
     }else{
       stop('Le modèle demandé n\'est pas implémenté!')
