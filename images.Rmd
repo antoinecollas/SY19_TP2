@@ -1,0 +1,119 @@
+---
+title: "Images"
+output: html_notebook
+---
+
+```{r}
+library(keras)
+library(jpeg)
+```
+
+#Les données
+##Chargement des images
+```{r}
+filenames_car <- array(list.files(path='data/images_train/car', full.names = TRUE, pattern='*.jpg'))
+filenames_cat <- array(list.files(path='data/images_train/cat', full.names = TRUE, pattern='*.jpg'))
+filenames_flower <- array(list.files(path='data/images_train/flower', full.names = TRUE, pattern='*.jpg'))
+res <- data.frame('Nombre d\'images'=rep(0,3))
+res[1,] <- length(filenames_car)
+res[2,] <- length(filenames_cat)
+res[3,] <- length(filenames_flower)
+colnames(res) <- c("Nombre d'images")
+row.names(res) <- c('Car', 'Cat', 'Flower')
+```
+```{r, echo=FALSE}
+knitr::kable(res)
+```
+##Création des étiquettes
+```{r}
+y <- c(rep(0, length(filenames_car)), rep(1, length(filenames_cat)), rep(2, length(filenames_flower)))
+length(y)
+```
+
+## Séparation des données d'entrainement, de validation et de test
+
+```{r}
+set.seed(123)
+filenames <- c(filenames_car, filenames_cat, filenames_flower)
+size_training <- floor(0.6*length(filenames))
+size_validation <- floor(0.2*length(filenames))
+size_test <- length(filenames) - size_training - size_validation
+sample_train <- sample(1:length(filenames), size = size_training)
+filenames_train <- filenames[sample_train]
+y_train <- y[sample_train]
+sample_val <- sample((1:length(filenames))[-sample_train], size = size_validation)
+filenames_val <- filenames[sample_val]
+y_val <- y[sample_val]
+c(length(filenames_train), length(y_train), length(filenames_val), length(y_val))
+```
+
+```{r}
+read_images <- function(list_files, dim_images){
+  images <- array(0, dim=c(length(list_files), dim_images[1], dim_images[2], 3))
+  for (i in 1:length(list_files)){
+    images[i,,,] <- image_to_array(image_load(path=list_files[i], target_size=dim_images))
+  }
+  return(images)
+}
+```
+
+```{r}
+dim_images <- c(40, 40)
+images_train <- read_images(filenames_train, dim_images)
+images_val <- read_images(filenames_val, dim_images)
+dim(images_train)
+dim(images_val)
+```
+
+#Model
+
+```{r}
+model <- keras_model_sequential()
+
+model %>%
+   layer_conv_2d(
+    filter = 32, kernel_size = c(3,3), padding = "same", 
+    input_shape = c(dim_images[1], dim_images[2], 3)
+  ) %>%
+  layer_activation("relu") %>%
+  layer_conv_2d(filter = 32, kernel_size = c(3,3)) %>%
+  layer_activation("relu") %>%
+  
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_dropout(0.25) %>%
+  
+  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same") %>%
+  layer_activation("relu") %>%
+  layer_conv_2d(filter = 32, kernel_size = c(3,3)) %>%
+  layer_activation("relu") %>%
+
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_dropout(0.25) %>%
+  
+  layer_flatten() %>%
+  layer_dense(512) %>%
+  layer_activation("relu") %>%
+  layer_dropout(0.5) %>%
+
+  layer_dense(3) %>%
+  layer_activation("softmax")
+
+opt <- optimizer_adam(lr = 0.001, beta_1 = 0.9, beta_2 = 0.999)
+
+model %>% compile(
+  loss = "sparse_categorical_crossentropy",
+  optimizer = opt,
+  metrics = "accuracy"
+)
+```
+
+# Training
+```{r}
+model %>% fit(
+  images_train, y_train,
+  batch_size = 30,
+  epochs = 100,
+  validation_data = list(images_val, y_val),
+  shuffle = TRUE
+)
+```
