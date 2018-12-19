@@ -58,7 +58,7 @@ read_images <- function(list_files, dim_images){
 ```
 
 ```{r}
-dim_images <- c(40, 40)
+dim_images <- c(100, 100)
 images_train <- read_images(filenames_train, dim_images)
 images_val <- read_images(filenames_val, dim_images)
 dim(images_train)
@@ -72,29 +72,46 @@ model <- keras_model_sequential()
 
 model %>%
    layer_conv_2d(
-    filter = 32, kernel_size = c(3,3), padding = "same", 
-    input_shape = c(dim_images[1], dim_images[2], 3)
+    filter = 16, kernel_size = c(3,3), padding = "same", strides = c(2, 2), input_shape = c(dim_images[1], dim_images[2], 3)
   ) %>%
   layer_activation("relu") %>%
-  layer_conv_2d(filter = 32, kernel_size = c(3,3)) %>%
+  layer_conv_2d(filter = 16, kernel_size = c(3,3), padding = "same") %>%
   layer_activation("relu") %>%
   
-  layer_max_pooling_2d(pool_size = c(2,2)) %>%
-  layer_dropout(0.25) %>%
-  
-  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same") %>%
+  layer_conv_2d(filter = 16, kernel_size = c(3,3), padding = "same", strides = c(2, 2)) %>%
   layer_activation("relu") %>%
-  layer_conv_2d(filter = 32, kernel_size = c(3,3)) %>%
-  layer_activation("relu") %>%
-
-  layer_max_pooling_2d(pool_size = c(2,2)) %>%
-  layer_dropout(0.25) %>%
-  
-  layer_flatten() %>%
-  layer_dense(512) %>%
+  layer_conv_2d(filter = 16, kernel_size = c(3,3), padding = "same") %>%
   layer_activation("relu") %>%
   layer_dropout(0.5) %>%
+  
+  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same", strides = c(2, 2)) %>%
+  layer_activation("relu") %>%
+  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same") %>%
+  layer_activation("relu") %>%
 
+  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same", strides = c(2, 2)) %>%
+  layer_activation("relu") %>%
+  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same") %>%
+  layer_activation("relu") %>%
+  layer_dropout(0.5) %>%
+  
+  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same", strides = c(2, 2)) %>%
+  layer_activation("relu") %>%
+  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same") %>%
+  layer_activation("relu") %>%
+
+  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same", strides = c(2, 2)) %>%
+  layer_activation("relu") %>%
+  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same") %>%
+  layer_activation("relu") %>%
+
+  layer_flatten() %>%
+  layer_dropout(0.5) %>%
+  
+  layer_dense(64) %>%
+  layer_activation("relu") %>%
+  layer_dropout(0.5) %>%
+  
   layer_dense(3) %>%
   layer_activation("softmax")
 
@@ -105,6 +122,7 @@ model %>% compile(
   optimizer = opt,
   metrics = "accuracy"
 )
+summary(model)
 ```
 
 # Training
@@ -112,7 +130,7 @@ model %>% compile(
 model %>% fit(
   images_train, y_train,
   batch_size = 30,
-  epochs = 100,
+  epochs = 50,
   validation_data = list(images_val, y_val),
   shuffle = TRUE
 )
