@@ -1,61 +1,88 @@
 ---
-title: "TP7"
+title: "TP7 Khalis - Mekkoudi - Collas"
 output:
   pdf_document: default
   html_notebook: default
 ---
 ```{r}
 source(file="cv_classif.R")
-RECHERCHE_HYPERPARAMETRES <- FALSE
 ```
 # Astronomy
 ## Chargement des données
 ```{r}
 astronomy <- read.table('data/astronomy_train.csv', sep = ",", header = TRUE)
-colnames(astronomy)[14] <- "y"
-ncol(astronomy)
-nrow(astronomy)
 ```
 
-## Présentation des données
-Ce problème est un problème de classification comportant 3 classes avec les effectifs suivants:
+Nous commençons par charger les données du jeu de données 'astronomy.csv'. Ce problème est un problème de classification comportant 3 classes. Ce jeu de données comporte 5000 individus décrits par 17 variables. Toutes les variables sont quantitatives. La proportion du nombre d'individus pour chaque classe est la suivante:
+
 ```{r, echo=FALSE}
-table(astronomy["y"])
+colnames(astronomy)[14] <- "y"
+nb_vars <- ncol(astronomy)
+nb_individus <- nrow(astronomy)
+res <- data.frame("data"=rep(0,3))
+temp <- table(astronomy["y"])
+res[1,] <- temp[1] / nb_individus
+res[2,] <- temp[2] / nb_individus
+res[3,] <- temp[3] / nb_individus
+row.names(res) <- row.names(temp) 
+colnames(res) <- c('Proportions') 
+knitr::kable(res)
 ```
 
-Ce jeu de données comporte 5000 individus pour 17 variables. Toutes les variables sont quantitatives.
-
-Les variables 'objid' et 'rerun' n'ont qu'une seule valeur. Nous les retirons puiqu'elles ne nous servirons pas à discriminer les 3 classes.
-```{r}
-for (colname in colnames(astronomy)){
-  if (length(unique(astronomy[,colname])) < 10) {
-    print(colname)
-    print(length(unique(astronomy[,colname])))
-  }
-}
-astronomy <- astronomy[,-which(names(astronomy)=="objid")]
-astronomy <- astronomy[,-which(names(astronomy)=="rerun")]
-```
-
-Nous centrons et réduisons les variables. En effet certaines variables comme 'specobjid' sont en 10^18 alors que d'autres variables sont en 10^-4 comme 'redshift'.
-```{r}
-astronomy <- cbind(data.frame(scale(astronomy[,-which(names(astronomy)=="y")], center = TRUE, scale = TRUE)), astronomy[,which(names(astronomy)=="y")])
-colnames(astronomy)[ncol(astronomy)] <- "y"
-head(astronomy, 3)
-```
 
 ## Séparation des données en entrainement/test
-Nous séparons les données en un ensemble d'entrainement sur lequel nous allons tester tout nos modèles et un ensemble de test qui nous permettra d'évaluer l'erreur pour le modèle que nous aurons retenu. Avant de conserver la même séparation des données à chaque execution du notebook nous fixons le générateur de nombre aléatoires (seed).
+Nous séparons les données en un ensemble d'entrainement sur lequel nous allons tester tout nos modèles et un ensemble de test qui nous permettra d'évaluer l'erreur pour le modèle que nous aurons retenu. Afin de conserver la même séparation des données à chaque execution du notebook nous fixons le générateur de nombres aléatoires (seed). 
+
 ```{r}
 set.seed(42)
 train_size <- nrow(astronomy) * (2/3)
 train <- sample(1:nrow(astronomy), size = train_size)
 astronomy_train <- astronomy[train,]
-nrow(astronomy_train)
 ncol(astronomy_train)
+nrow(astronomy_train)
 ```
 
-##Analyses discriminantes
+## Transformations des données d'entrainement
+Nous appliquons plusieurs transformations à l'ensemble d'entrainement:
+
+Les variables 'objid' et 'rerun' n'ont qu'une seule valeur. Nous les retirons puisqu'elles ne nous servirons pas à discriminer les 3 classes.
+
+
+Nous centrons et réduisons les variables. En effet certaines variables comme 'specobjid' sont en 10^18 alors que d'autres variables sont en 10^-4 comme 'redshift'.
+
+Nous affichons 3 individus à titre d'exemple:
+
+```{r, echo=FALSE}
+for (colname in colnames(astronomy)){
+  if (length(unique(astronomy[,colname])) < 10) {
+    #print(colname)
+    #print(length(unique(astronomy[,colname])))
+  }
+}
+```
+
+```{r}
+astronomy_train$objid <- NULL
+astronomy_train$rerun <- NULL
+astronomy_train <- cbind(data.frame(scale(astronomy_train[,-which(names(astronomy_train)=="y")], center = TRUE, scale = TRUE)), astronomy_train[,which(names(astronomy_train)=="y")])
+colnames(astronomy_train)[ncol(astronomy_train)] <- "y"
+knitr::kable(head(astronomy_train, 3), digits=1)
+```
+
+
+##Méthode d’évaluation
+
+Nous évaluons chaque modèle sur l’ensemble d’entrainement à l’aide d’une validation croisée (avec 10 parties). Nous calculons l’erreur moyenne et l’écart type. Nous choisissons le modèle ayant la plus faible erreur de classification pour notre modèle final. Enfin, nous estimons l’erreur de notre modèle final sur l’ensemble de test.
+
+##Validation croisée
+Nous avons implémenté une fonction qui calcule l’erreur de classification et l’écart type par validation croisée pour l’ensemble des modèles que nous utiliserons par la suite. Cette fonction s'appelle 'CV_eval'.
+
+NB: Nous utilisons la constante 'RECHERCHE_HYPERPARAMETRES' afin de ne pas rechercher les hyperparamètres à chaque execution de ce notebook.
+```{r}
+RECHERCHE_HYPERPARAMETRES <- FALSE
+```
+
+#Analyses discriminantes
 ```{r}
 set.seed(123)
 #validation croisée sur l'ensemble d'entrainement
@@ -76,11 +103,11 @@ L'analyse discriminante quadratique est l'algorithme le plus performant des troi
 
 #SVM
 
+##Optimisation C
 Les SVM ont l'hyperparamètre C: si C est faible alors le SVM aura une large marge quitte à mal classer certains points (on peut dans ce cas se retrouver dans un cas de sous entrainement). De manière opposé, si C est grand alors le SVM classifira bien beaucoup de points mais aura une faible marge et donc risque un sur entrainement. Nous cherchons le meilleur compromis.
 
 Nous cherchons l'hyperparamètre C minimisant l'erreur de classification pour un noyau linéaire.
 
-##Optimisation C
 ```{r}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
