@@ -13,7 +13,7 @@ CV_eval <- function(model, data, hyperparameters=c(), fold=10){
   for(k in (1:K)){
     if ((model=='adl') || (model=='adq')){
       if (model=='adl'){
-        model.fit <- lda(formula=as.factor(y)~., data=data[folds!=k,])
+        model.fit <- suppressWarnings(lda(formula=as.factor(y)~., data=data[folds!=k,]))
       }else{
         model.fit <- qda(formula=as.factor(y)~., data=data[folds!=k,])
       }

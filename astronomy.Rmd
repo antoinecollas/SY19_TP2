@@ -1,9 +1,12 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "TP7"
+output:
+  pdf_document: default
+  html_notebook: default
 ---
 ```{r}
 source(file="cv_classif.R")
+RECHERCHE_HYPERPARAMETRES <- FALSE
 ```
 # Astronomy
 ## Chargement des données
@@ -12,13 +15,15 @@ astronomy <- read.table('data/astronomy_train.csv', sep = ",", header = TRUE)
 colnames(astronomy)[14] <- "y"
 ncol(astronomy)
 nrow(astronomy)
+```
+
+## Présentation des données
+Ce problème est un problème de classification comportant 3 classes avec les effectifs suivants:
+```{r, echo=FALSE}
 table(astronomy["y"])
 ```
-## Présentation des données
-Classification: 3 classes
-Nombre d'individus: 5000
-Nombre de variables: 17
-Toutes les variables sont quantitatives.
+
+Ce jeu de données comporte 5000 individus pour 17 variables. Toutes les variables sont quantitatives.
 
 Les variables 'objid' et 'rerun' n'ont qu'une seule valeur. Nous les retirons puiqu'elles ne nous servirons pas à discriminer les 3 classes.
 ```{r}
@@ -30,14 +35,13 @@ for (colname in colnames(astronomy)){
 }
 astronomy <- astronomy[,-which(names(astronomy)=="objid")]
 astronomy <- astronomy[,-which(names(astronomy)=="rerun")]
-astronomy
 ```
 
-Nous centrons et réduisons les variables. En effet certaines variables comme 'specobjid' sont en 1O^18 alors que d'autres variables sont en 10^-4 comme 'redshift'.
+Nous centrons et réduisons les variables. En effet certaines variables comme 'specobjid' sont en 10^18 alors que d'autres variables sont en 10^-4 comme 'redshift'.
 ```{r}
 astronomy <- cbind(data.frame(scale(astronomy[,-which(names(astronomy)=="y")], center = TRUE, scale = TRUE)), astronomy[,which(names(astronomy)=="y")])
 colnames(astronomy)[ncol(astronomy)] <- "y"
-astronomy
+head(astronomy, 3)
 ```
 
 ## Séparation des données en entrainement/test
@@ -67,7 +71,8 @@ Nous obtenons les erreurs suivantes:
 ```{r, echo=FALSE}
 knitr::kable(res)
 ```
-L'analyse discriminante quadratique est l'algorithme le plus performant des trois modèles testés précédemments. Les modèles plus complexes fonctionnent donc bien sur ce jeu de données. Nous testons donc SVM avec différents noyaux.
+
+L'analyse discriminante quadratique est l'algorithme le plus performant des trois modèles testés précédemment. Les modèles plus complexes fonctionnent donc bien sur ce jeu de données. Nous testons donc SVM avec différents noyaux.
 
 #SVM
 
@@ -77,19 +82,20 @@ Nous cherchons l'hyperparamètre C minimisant l'erreur de classification pour un
 
 ##Optimisation C
 ```{r}
-set.seed(123)
-C_err_min <- 0
-C_liste <- (1:5)^5
-erreurs_C <- rep(0, length(C_liste))
-for (i in 1:length(C_liste)){
-  print(C_liste[i])
-  hyperparametres <- list(kernel="vanilla", C=C_liste[i], kpar=list())
-  erreurs_C[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+if (RECHERCHE_HYPERPARAMETRES){
+  set.seed(123)
+  C_err_min <- 0
+  C_liste <- (1:5)^5
+  erreurs_C <- rep(0, length(C_liste))
+  for (i in 1:length(C_liste)){
+    hyperparametres <- list(kernel="vanilla", C=C_liste[i], kpar=list())
+    erreurs_C[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+  }
+  plot(C_liste, erreurs_C)
+  C <- C_liste[which.min(erreurs_C)]
+}else{
+  C <- 5^5
 }
-```
-```{r}
-plot(C_liste, erreurs_C)
-C <- C_liste[which.min(erreurs_C)]
 ```
 
 ##SVM à noyaux
@@ -103,17 +109,23 @@ Nous testons trois noyaux pour les SVM:
 L'idéal serait d'optimiser C pour différents noyaux. Cependant chaque noyau possède d'autres hyperparamètres et essayer toutes les combinaisons se révèle trop couteux en calculs. Par conséquent nous conservons la valeur trouvée avec le noyau linéaire.
 
 ```{r}
-set.seed(123)
-degre_err_min <- 0
-degres <- 2:5 
-erreurs_degres <- rep(0, length(degres)) 
-for (i in 1:length(degres)){
-  print(degres[i])
-  hyperparametres <- list(kernel="polydot", kpar=list(degree=degres[i]), C=C)
-  erreurs_degres[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+if (RECHERCHE_HYPERPARAMETRES){
+  set.seed(123)
+  degre_err_min <- 0
+  degres <- 2:5 
+  erreurs_degres <- rep(0, length(degres)) 
+  for (i in 1:length(degres)){
+    print(degres[i])
+    hyperparametres <- list(kernel="polydot", kpar=list(degree=degres[i]), C=C)
+    erreurs_degres[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+  }
+  plot(degres, erreurs_degres)
+  degre <- which.min(erreurs_degres)
+}else{
+  degre <- 2
 }
-plot(degres, erreurs_degres)
 ```
+
 ```{r}
 set.seed(123)
 res <- data.frame("Erreur"=rep(Inf,3), "Ecart type"=rep(Inf,3))
@@ -123,7 +135,7 @@ res <- data.frame("Erreur"=rep(Inf,3), "Ecart type"=rep(Inf,3))
 hyperparametres <- list(kernel="vanilladot", kpar=list(), C=C)
 res[1,] <- CV_eval('svc', astronomy_train, hyperparametres)
 #noyau polynomial
-hyperparametres <- list(kernel="polydot", kpar=list(degree=which.min(erreurs_degres)), C=C)
+hyperparametres <- list(kernel="polydot", kpar=list(degree=degre), C=C)
 res[2,] <- CV_eval('svc', astronomy_train, hyperparametres)
 #noyau rbf
 hyperparametres <- list(kernel="rbfdot", kpar=list(), C=C)
@@ -143,15 +155,23 @@ Nous testons les K plus proches voisins. Pour cela nous devons chercher le meill
 ```{r}
 set.seed(123)
 res <- data.frame("Erreur"=rep(Inf,1), "Ecart type"=rep(Inf,1))
-list_k <- (1:10)*40
-for (k in list_k){
+if(RECHERCHE_HYPERPARAMETRES){
+  list_k <- (1:10)*40
+  for (k in list_k){
+    hyperparametres <- list(K=k)
+    temp <- CV_eval('knn', astronomy_train, hyperparametres)
+    if(temp[1]<res[1]){
+      k_min <- k
+      res[1,1] <- temp[1]
+      res[1,2] <- temp[2]
+    }
+  }
+}else{
+  k <- 40
   hyperparametres <- list(K=k)
   temp <- CV_eval('knn', astronomy_train, hyperparametres)
-  if(temp[1]<res[1]){
-    k_min <- k
-    res[1,1] <- temp[1]
-    res[1,2] <- temp[2]
-  }
+  res[1,1] <- temp[1]
+  res[1,2] <- temp[2]
 }
 ```
 
