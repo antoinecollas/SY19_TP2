@@ -38,8 +38,10 @@ set.seed(42)
 train_size <- nrow(astronomy) * (2/3)
 train <- sample(1:nrow(astronomy), size = train_size)
 astronomy_train <- astronomy[train,]
+astronomy_test <- astronomy[-train,]
 ncol(astronomy_train)
 nrow(astronomy_train)
+nrow(astronomy_test)
 ```
 
 ## Transformations des données d'entrainement
@@ -64,8 +66,15 @@ for (colname in colnames(astronomy)){
 ```{r}
 astronomy_train$objid <- NULL
 astronomy_train$rerun <- NULL
-astronomy_train <- cbind(data.frame(scale(astronomy_train[,-which(names(astronomy_train)=="y")], center = TRUE, scale = TRUE)), astronomy_train[,which(names(astronomy_train)=="y")])
+scaled_data <- scale(astronomy_train[,-which(names(astronomy_train)=="y")], center = TRUE, scale = TRUE)
+centers <- attr(scaled_data, 'scaled:center')
+scales <- attr(scaled_data, 'scaled:scale')
+astronomy_train <- cbind(data.frame(scaled_data), astronomy_train[,which(names(astronomy_train)=="y")])
 colnames(astronomy_train)[ncol(astronomy_train)] <- "y"
+```
+
+```{r, echo=FALSE}
+rownames(astronomy_train) <- NULL
 knitr::kable(head(astronomy_train, 3), digits=1)
 ```
 
@@ -205,3 +214,23 @@ if(RECHERCHE_HYPERPARAMETRES){
 ```{r, echo=FALSE}
 knitr::kable(res)
 ```
+
+#Modèle retenu
+Le modèle retenu est le SVM avec un noyau linéaire puisqu'il correspond au modèle ayant la plus faible erreur de classification.
+Nous évaluons l’erreur sur l’ensemble de test (réservé à cet effet au départ): cette erreur nous donne une estimation non biaisée de l'erreur de classification.
+```{r}
+astr.mod <- ksvm(y~., data=astronomy_train, type="C-svc", kernel='vanilla', C=5^5, cross=0)
+save(centers, scales, astr.mod, file="env_astronomy.RData")
+```
+
+```{r}
+rm(list=setdiff(ls(), "astronomy_test"))
+astronomy_test_y <- astronomy_test$y
+astronomy_test_X <- astronomy_test
+astronomy_test_X$y <- NULL
+source(file="predicteurs.R")
+y_pred <- classifieur_astronomie(astronomy_test_X)
+library(caret)
+confusionMatrix(data = y_pred, reference = astronomy_test_y)
+```
+
