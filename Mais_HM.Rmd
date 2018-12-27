@@ -1,0 +1,320 @@
+---
+title: "Maïs Regression"
+output: html_notebook
+---
+
+
+
+```{r}
+library(corrplot)
+library(rlist)
+library(leaps)
+library(splines)
+library(gam)
+
+data<-read.csv('mais_train.csv');
+#summary(data);
+
+YcolNum <- 3
+XcolNum <- 4:ncol(data)
+
+Y<-data[,YcolNum]
+X<-data[,XcolNum]
+
+
+lm.model.full <- lm(Y~., data = X)
+plot(lm.model.full ,which = 4, cook.levels = c(0, 0.1))
+
+corrplot(cor(X), method="color",type="upper")
+
+X<- X[-c(8,610,1787,1441,1436,1822),]
+Y<-Y[-c(8,610,1787,1441,1436,1822)]
+
+ntot <- nrow(X)
+
+
+lm.model.full <- lm(Y~., data = X)
+plot(lm.model.full ,which = 4, cook.levels = c(0, 0.1))
+
+
+```
+
+```{R}
+nrow(data)
+ncol(data)
+```
+
+```{R}
+
+MSE <- function(Ypred, Yreal){
+  (mean(abs(Ypred - Yreal)))
+}
+
+# FUNCTION
+separate <- function(data, YcolNum=3, XcolNum=4:57){
+  Y<-data[,YcolNum]
+  X<-data[,XcolNum]
+  
+  ensembleapp <- sample(1:ntot, size = floor(2*ntot/3))
+  app <- data[ensembleapp, ]
+  Xapp <- app[, XcolNum]
+  Yapp <- as.vector(app[, YcolNum])
+  
+  tst <- data[-ensembleapp, ]
+  Xtst <- tst[, XcolNum]
+  Ytst <- as.vector(tst[, YcolNum])
+  
+  
+  
+  list("Y"=Y,"X"=X,"Xapp"=Xapp,"Yapp"=Yapp,"Xtst"=Xtst,"Ytst"=Ytst)
+}
+
+
+
+```
+
+
+```{R}
+
+#ensembleapp <- sample(1:ntot, size = floor(2*ntot/3))
+Xapp <- X[ensembleapp,]
+Yapp <- as.vector(Y[ensembleapp])
+
+#any(is.na(Xapp$NUMD))
+
+calc_dpt <- matrix(0,nrow = length(levels(factor(X$NUMD))))
+for(i in 1:length(levels(factor(X$NUMD))))
+  calc_dpt[i,] = mean(Yapp[Xapp$NUMD==i])-mean(Yapp)
+
+for(i in 1:nrow(Xapp)){
+  Xapp$NUMD[i]<-calc_dpt[Xapp[i,"NUMD"],]
+}
+
+Xtst <- X[-ensembleapp,]
+Ytst <- as.vector(Y[-ensembleapp])
+
+
+for(i in 1:nrow(Xtst)){
+  Xtst$NUMD[i]<-calc_dpt[Xtst[i,"NUMD"],]
+}
+
+Xapp<-Xapp[,3:ncol(X)]
+Xtst<-Xtst[,3:ncol(X)]
+
+
+lm.model <- lm(Yapp~., data = Xapp)
+
+
+Ypred <- predict.lm(lm.model,Xtst)
+print("regression linéaire")
+MSE(Ypred,Ytst)
+#summary(lm.model)
+
+#plot(Ypred, Ytst)
+#abline(0,1)
+
+
+```
+
+Valeurs abérantes : 
+8
+610
+1787
+
+Corrélation 
+par mois
+
+```{R}
+
+listDataYear <- list()
+for (year in 1:57){
+  DataYear <- separate(data[data$year_harvest==year,])
+  listDataYear = append(listDataYear, list(DataYear))
+}
+
+```
+
+
+```{R}
+nbdpt<-length(levels(factor(data$NUMD)))
+mescouleurs <- rainbow(length(levels(factor(data$NUMD))))
+#plot(data$NUMD, data$yield_anomaly, col = mescouleurs[data$NUMD])
+plot(data$year_harvest, data$yield_anomaly, col = mescouleurs[data$NUMD])
+#legend("topleft", inset = 0.02, pch = 19, legend = levels(factor(data$NUMD)), col = mescouleurs)
+
+for(i in c(1:10)){
+mes10couleurs <- rainbow(10)
+data_loc <- data[data$NUMD<(10*i) & data$NUMD>=(10*i-10),]
+plot(data_loc$year_harvest, data_loc$yield_anomaly, col = mes10couleurs[((data_loc$NUMD)%%10)+1])
+legend("topleft", inset = 0.02, pch = 19, legend = levels(factor(data_loc$NUMD)), col = mes10couleurs)
+}
+
+
+```
+
+L'information relative à l'année est plutot identifiante
+En recanche, l'information lié au département à de l'importance car elle délimite une zone géographique ou les propriété géologique peuvent influencer positivement ou négativement nos résultats.
+
+De ce fait, on peut essayer de remplacer le département par une moyenne de Ypred
+
+
+```{R}
+
+
+```
+
+
+
+
+
+```{R}
+#FUNCTION
+#reg.fit.ex<-regsubsets(Y~.,data=X,method="exhaustive",nvmax=50,really.big=T)
+#plot(reg.fit.ex,scale="r2")
+#plot(reg.fit.ex,scale="adjr2")
+#plot(reg.fit.ex,scale="bic")
+
+reg.fit.for<-regsubsets(Y~.,data=X,method="forward",nvmax=40,really.big=T)
+plot(reg.fit.for,scale="r2")
+plot(reg.fit.for,scale="adjr2")
+plot(reg.fit.for,scale="bic")
+
+reg.fit.back<-regsubsets(Y~.,data=X,method="backward",nvmax=40,really.big=T)
+plot(reg.fit.back,scale="r2")
+plot(reg.fit.back,scale="adjr2")
+plot(reg.fit.back,scale="bic")
+
+```
+
+
+
+```{R}
+rstd <- rstandard(lm.model)
+plot(Yapp, rstd)
+rres <- resid(lm.model)
+plot(Yapp, rres)
+qqnorm(rres, asp = 1)
+qqline(rres, dist = qnorm)
+
+```
+
+
+```{R}
+acp<-princomp(scale(X))
+Z<-acp$scores
+lambda<-acp$sdev
+plot(cumsum(lambda)/sum(lambda),type="l",xlab="M", ylab="proportion of explained variance")
+```
+
+```{R}
+
+print("regression linéaire avec variables à la puissance D")
+
+for(d in c(1:10)){
+  Xtamp <- Xapp
+  for(i in 1:(ncol(Xapp))){
+    Xtamp[,i]<-(Xapp[,i])**d
+  }
+  reg<-lm(Yapp~., data=Xtamp)
+  Ypred<-predict(reg,Xtst)
+  print(d)
+  print(MSE(Ypred, Ytst))
+}
+
+```
+
+```{R}
+
+print("regression linéaire avec variables avec tous les polynomes")
+
+d<-3
+Xpoly <- NULL
+XTpoly <- NULL
+for(i in 1:(ncol(Xapp))){
+  Xpoly <- cbind(Xpoly, poly(Xapp[,i], degree = d))
+  XTpoly <- cbind(XTpoly, poly(Xtst[,i], degree = d))
+}
+colnames(Xpoly)<-1:(d*ncol(Xapp))
+colnames(XTpoly)<-1:(d*ncol(Xapp))
+
+reg<-lm(Yapp~., data=as.data.frame(Xpoly))
+Ypred<-predict(reg,as.data.frame(XTpoly))
+print(MSE(Ypred, Ytst))
+
+#summary(reg)
+
+```
+
+
+```{R}
+
+Xbs<-NULL
+XTbs<-NULL
+Xns<-NULL
+XTns<-NULL
+Xs<-NULL
+XTs<-NULL
+for(i in 1:(ncol(Xapp))){
+  Xbs <- cbind(Xbs,bs(Xapp[,i], df=5))
+  XTbs <- cbind(XTbs,bs(Xtst[,i], df=5))
+  Xns <- cbind(Xns,ns(Xapp[,i], df=5))
+  XTns <- cbind(XTns,ns(Xtst[,i], df=5))
+  Xs <- cbind(Xs,s(Xapp[,i], df=5))
+  XTs <- cbind(XTs,s(Xtst[,i], df=5))
+}
+colnames(Xbs)<-c()
+colnames(XTbs)<-c()
+colnames(Xns)<-c()
+colnames(XTns)<-c()
+colnames(Xs)<-c()
+colnames(XTs)<-c()
+
+fit<-lm(Yapp~.,data=as.data.frame(Xbs))
+Ypred<-predict(fit,as.data.frame(XTbs))
+print("Cubic Spline")
+print(MSE(Ypred, Ytst))
+
+fit<-lm(Yapp~.,data=as.data.frame(Xns))
+Ypred<-predict(fit,as.data.frame(XTns))
+print("Natural Spline")
+print(MSE(Ypred, Ytst))
+
+fit<-gam(Yapp~.,data=as.data.frame(Xbs))
+Ypred<-predict(fit,as.data.frame(XTbs))
+print("Generalised Cubic Spline")
+print(MSE(Ypred, Ytst))
+
+fit<-gam(Yapp~.,data=as.data.frame(Xns))
+Ypred<-predict(fit,as.data.frame(XTns))
+print("Generalised Natural Spline")
+print(MSE(Ypred, Ytst))
+
+fit<-lm(Yapp~.,data=as.data.frame(Xs))
+Ypred<-predict(fit,as.data.frame(XTs))
+print("Smooth Natural Spline")
+print(MSE(Ypred, Ytst))
+
+fit<-gam(Yapp~.,data=as.data.frame(Xs))
+Ypred<-predict(fit,as.data.frame(XTs))
+print("Smooth Generalised Natural Spline")
+print(MSE(Ypred, Ytst))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
