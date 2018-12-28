@@ -4,7 +4,7 @@ output:
   pdf_document: default
   html_notebook: default
 ---
-```{r}
+```{r, results='hide'}
 source(file="cv_classif.R")
 ```
 # Astronomy
@@ -63,7 +63,7 @@ for (colname in colnames(astronomy)){
 }
 ```
 
-```{r}
+```{r, echo=FALSE}
 astronomy_train$objid <- NULL
 astronomy_train$rerun <- NULL
 scaled_data <- scale(astronomy_train[,-which(names(astronomy_train)=="y")], center = TRUE, scale = TRUE)
@@ -88,7 +88,7 @@ Nous avons implémenté une fonction qui calcule l’erreur de classification et
 
 NB: Nous utilisons la constante 'RECHERCHE_HYPERPARAMETRES' afin de ne pas rechercher les hyperparamètres à chaque execution de ce notebook.
 ```{r}
-RECHERCHE_HYPERPARAMETRES <- FALSE
+RECHERCHE_HYPERPARAMETRES <- TRUE
 ```
 
 #Analyses discriminantes
@@ -99,12 +99,12 @@ res <- data.frame("Erreur"=rep(0,3), "Ecart type"=rep(0,3))
 res[1,] <- CV_eval('adl', astronomy_train)
 res[2,] <- CV_eval('adq', astronomy_train)
 res[3,] <- CV_eval('bayesien_naif', astronomy_train)
-colnames(res) <- c("Erreur", "Ecart type")
-row.names(res) <- c("ADL", "ADQ", "Bayesien naif")
 ```
 Nous obtenons les erreurs suivantes:
 
 ```{r, echo=FALSE}
+colnames(res) <- c("Erreur", "Ecart type")
+row.names(res) <- c("ADL", "ADQ", "Bayesien naif")
 knitr::kable(res)
 ```
 
@@ -113,56 +113,77 @@ L'analyse discriminante quadratique est l'algorithme le plus performant des troi
 #SVM
 
 ##Optimisation C
-Les SVM ont l'hyperparamètre C: si C est faible alors le SVM aura une large marge quitte à mal classer certains points (on peut dans ce cas se retrouver dans un cas de sous entrainement). De manière opposé, si C est grand alors le SVM classifira bien beaucoup de points mais aura une faible marge et donc risque un sur entrainement. Nous cherchons le meilleur compromis.
+Les SVM ont l'hyperparamètre C: si C est faible alors le SVM aura une large marge quitte à mal classer certains points (on peut dans ce cas se retrouver dans un cas de sous entrainement). De manière opposée, si C est grand alors le SVM classifira bien beaucoup de points mais aura une faible marge et donc risque un surentrainement. Nous cherchons le meilleur compromis.
 
-Nous cherchons l'hyperparamètre C minimisant l'erreur de classification pour un noyau linéaire.
+Nous cherchons l'hyperparamètre C minimisant l'erreur de classification pour un noyau linéaire. Nous testons différents C: 1, 32, 243, 1024 et 3125. Pour chaque valeur nous calculons l'erreur sur le jeu d'entrainement par validation croisée.
 
-```{r}
+```{r, fig.height = 3, fig.width = 7, fig.align = "center"}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
-  C_err_min <- 0
   C_liste <- (1:5)^5
-  erreurs_C <- rep(0, length(C_liste))
+  erreurs <- rep(0, length(C_liste))
   for (i in 1:length(C_liste)){
     hyperparametres <- list(kernel="vanilla", C=C_liste[i], kpar=list())
-    erreurs_C[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+    erreurs[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
   }
-  plot(C_liste, erreurs_C)
-  C <- C_liste[which.min(erreurs_C)]
+  plot(C_liste, erreurs, type="l",xlab="C", ylab="Erreur")
+  C <- C_liste[which.min(erreurs)]
+  print(C)
 }else{
-  C <- 5^5
+  C <- 3125
 }
 ```
 
-##SVM à noyaux
+## SVM à noyaux
 Les différents noyaux vont nous permettre de trouver des fontières de décision non linéaires.
 
 Nous testons trois noyaux pour les SVM:
-- noyau linéaire ('vanilladot') qui n'a pas d'hyperparamètres
-- noyau polynomial pour lequel il faut régler le degré du noyau. Nous testons cet hyperparamètre pour des valeurs de 2 à 5. Nous retenons le degré donnant la plus faible erreur par validation croisée.
-- noyau gaussien
+
+1. noyau linéaire ('vanilladot') qui n'a pas d'hyperparamètres
+2. noyau polynomial pour lequel il faut régler le degré du noyau. Nous testons cet hyperparamètre pour des valeurs de 2 à 5. Nous retenons le degré donnant la plus faible erreur par validation croisée.
+3. noyau gaussien pour lequel il faut régler le paramètre sigma. Nous testons cet hyperparamètre pour des valeurs de 0.0001 à 0.02 par pas de 0.005. Nous retenons le sigma donnant la plus faible erreur par validation croisée.
 
 L'idéal serait d'optimiser C pour différents noyaux. Cependant chaque noyau possède d'autres hyperparamètres et essayer toutes les combinaisons se révèle trop couteux en calculs. Par conséquent nous conservons la valeur trouvée avec le noyau linéaire.
 
-```{r}
+```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
-  degre_err_min <- 0
   degres <- 2:5 
-  erreurs_degres <- rep(0, length(degres)) 
+  erreurs <- rep(0, length(degres)) 
   for (i in 1:length(degres)){
-    print(degres[i])
     hyperparametres <- list(kernel="polydot", kpar=list(degree=degres[i]), C=C)
-    erreurs_degres[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+    erreurs[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
   }
-  plot(degres, erreurs_degres)
-  degre <- which.min(erreurs_degres)
+  plot(degres, erreurs, type="l",xlab="Degre", ylab="Erreur")
+  degre <- degres[which.min(erreurs)]
+  print(degre)
 }else{
   degre <- 2
 }
 ```
 
-```{r}
+Nous observons que le noyau polynomial n'améliore pas les performances de notre classifieur: plus le degré du noyau est élevé plus les performances se dégradent.
+
+```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
+if (RECHERCHE_HYPERPARAMETRES){
+  set.seed(123)
+  sigma <- seq(0.0001, 0.02, by=0.005)
+  erreurs <- rep(0, length(sigma)) 
+  for (i in 1:length(sigma)){
+    hyperparametres <- list(kernel="rbfdot", kpar=list(sigma=sigma[i]), C=C)
+    erreurs[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+  }
+  plot(sigma, erreurs, type="l",xlab="Sigma", ylab="Erreur")
+  sigma <- sigma[which.min(erreurs)]
+  print(sigma)
+}else{
+  sigma <- 0.005
+}
+```
+
+Nous observons que le noyau gaussien n'améliore pas non plus les perfomances par rapport à un noyau linéaire.
+
+```{r, echo=FALSE}
 set.seed(123)
 res <- data.frame("Erreur"=rep(Inf,3), "Ecart type"=rep(Inf,3))
 
@@ -174,42 +195,71 @@ res[1,] <- CV_eval('svc', astronomy_train, hyperparametres)
 hyperparametres <- list(kernel="polydot", kpar=list(degree=degre), C=C)
 res[2,] <- CV_eval('svc', astronomy_train, hyperparametres)
 #noyau rbf
-hyperparametres <- list(kernel="rbfdot", kpar=list(), C=C)
+hyperparametres <- list(kernel="rbfdot", kpar=list(sigma=sigma), C=C)
 res[3,] <- CV_eval('svc', astronomy_train, hyperparametres)
-colnames(res) <- c("Erreur", "Ecart type")
-row.names(res) <- c("vanilla", "poly", "rbf")
 ```
 Nous obtenons les erreurs suivantes:
 
 ```{r, echo=FALSE}
+colnames(res) <- c("Erreur", "Ecart type")
+row.names(res) <- c("vanilla", "poly", "rbf")
 knitr::kable(res)
 ```
 
-#K plus proches voisins
-Nous testons les K plus proches voisins. Pour cela nous devons chercher le meilleur K, c'est à dire le K pour lequel notre erreur de validation croisée est minimale. Nous évaluons les valeurs de K entre 1 et 100.
+# Forêts aléatoires
 
-```{r}
-set.seed(123)
-res <- data.frame("Erreur"=rep(Inf,1), "Ecart type"=rep(Inf,1))
-if(RECHERCHE_HYPERPARAMETRES){
-  list_k <- (1:10)*40
-  for (k in list_k){
-    hyperparametres <- list(K=k)
-    temp <- CV_eval('knn', astronomy_train, hyperparametres)
-    if(temp[1]<res[1]){
-      k_min <- k
-      res[1,1] <- temp[1]
-      res[1,2] <- temp[2]
-    }
+Nous essayons maintenant les forêts aléatoires. 
+
+Nous devons tout d'abord nous assurer que notre fôret aléatoire contient suffisamment d'arbres. En effet, si le nombre d'arbres est trop faible certains individus ne seront pas utilisés (à cause du bootstrap). Si le nombre d'arbres est élévé la recherche de l'hyperparamètre 'mtry' (que faisons ensuite) sera très longue. Pour cela nous calculons l'erreur de classification par validation croisée pour des fôrets ayant entre 1 et 200 (par pas de 20).
+
+```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
+if (RECHERCHE_HYPERPARAMETRES){
+  set.seed(123)
+  ntree <- c(1, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200)
+  erreurs <- rep(0, length(ntree)) 
+  for (i in 1:length(ntree)){
+    hyperparametres <- list(ntree=ntree[i])
+    erreurs[i] <- CV_eval('rf', astronomy_train, hyperparametres)[1]
   }
+  plot(ntree, erreurs, type="l",xlab="Nombre d'arbres", ylab="Erreur")
+  ntree <- ntree[which.min(erreurs)]
+  print(ntree)
 }else{
-  k <- 40
-  hyperparametres <- list(K=k)
-  temp <- CV_eval('knn', astronomy_train, hyperparametres)
-  res[1,1] <- temp[1]
-  res[1,2] <- temp[2]
+  ntree <- 160
 }
 ```
+
+
+Ensuite, nous avons un hyperparamètre à optimiser qui est 'mtry' dans la bibliothèque 'randomForest'. Cet hyperparamètre correspond au nombre de variables sélectionnées, par échantillonnage, comme candidates pour chaque noeud. Plus il y a de variables meilleure sera la séparation des données à cahque noeud mais les arbres seront similaires et donc l'agrégation des arbres améliorera peu les performances.
+
+```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
+if (RECHERCHE_HYPERPARAMETRES){
+  set.seed(123)
+  nb_vars <- dim(astronomy_train)[2]-1
+  mtry <- 1:nb_vars
+  erreurs <- rep(0, nb_vars) 
+  for (i in 1:nb_vars){
+    hyperparametres <- list(mtry=mtry[i], ntree=ntree)
+    erreurs[i] <- CV_eval('rf', astronomy_train, hyperparametres)[1]
+  }
+  plot(mtry, erreurs, type="l",xlab="Nombre de variables", ylab="Erreur")
+  mtry <- which.min(erreurs)
+  print(mtry)
+}else{
+  mtry <- 9
+}
+```
+
+Le nombre de variables minimisant l'erreur de classification est 9.
+
+```{r, echo=FALSE}
+set.seed(123)
+res <- data.frame("Erreur"=rep(Inf,1), "Ecart type"=rep(Inf,1))
+#validation croisée sur l'ensemble d'entrainement
+hyperparametres <- list(ntree=ntree, mtry=mtry)
+res[1,] <- CV_eval('rf', astronomy_train, hyperparametres)
+```
+Nous obtenons l'erreur suivante:
 
 ```{r, echo=FALSE}
 knitr::kable(res)
@@ -219,7 +269,7 @@ knitr::kable(res)
 Le modèle retenu est le SVM avec un noyau linéaire puisqu'il correspond au modèle ayant la plus faible erreur de classification.
 Nous évaluons l’erreur sur l’ensemble de test (réservé à cet effet au départ): cette erreur nous donne une estimation non biaisée de l'erreur de classification.
 ```{r}
-astr.mod <- ksvm(y~., data=astronomy_train, type="C-svc", kernel='vanilla', C=5^5, cross=0)
+astr.mod <- ksvm(y~., data=astronomy_train, type="C-svc", kernel='vanilla', C=3125, cross=0)
 save(centers, scales, astr.mod, file="env_astronomy.RData")
 ```
 
@@ -230,7 +280,12 @@ astronomy_test_X <- astronomy_test
 astronomy_test_X$y <- NULL
 source(file="predicteurs.R")
 y_pred <- classifieur_astronomie(astronomy_test_X)
+```
+Nous obtenons la matrice de confusion suivante sur le jeu de test:
+```{r, echo=FALSE}
 library(caret)
-confusionMatrix(data = y_pred, reference = astronomy_test_y)
+cm <- confusionMatrix(data = y_pred, reference = astronomy_test_y)
+knitr::kable(cm$table)
 ```
 
+La précision est de 99.2%
