@@ -4,7 +4,7 @@ output:
   pdf_document: default
   html_notebook: default
 ---
-```{r, results='hide'}
+```{r, message=FALSE}
 source(file="cv_classif.R")
 ```
 # Astronomy
@@ -108,6 +108,9 @@ row.names(res) <- c("ADL", "ADQ", "Bayesien naif")
 knitr::kable(res)
 ```
 
+
+Nous ne testons pas la régression la régression logistique puisque la'analyse discriminante linéaire donne de mauvaises performances.
+
 L'analyse discriminante quadratique est l'algorithme le plus performant des trois modèles testés précédemment. Les modèles plus complexes fonctionnent donc bien sur ce jeu de données. Nous testons donc SVM avec différents noyaux.
 
 #SVM
@@ -120,19 +123,20 @@ Nous cherchons l'hyperparamètre C minimisant l'erreur de classification pour un
 ```{r, fig.height = 3, fig.width = 7, fig.align = "center"}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
-  C_liste <- (1:5)^5
-  erreurs <- rep(0, length(C_liste))
-  for (i in 1:length(C_liste)){
-    hyperparametres <- list(kernel="vanilla", C=C_liste[i], kpar=list())
-    erreurs[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+  C_list <- (1:5)^5
+  erreurs_C <- rep(0, length(C_list))
+  for (i in 1:length(C_list)){
+    hyperparametres <- list(kernel="vanilla", C=C_list[i], kpar=list())
+    erreurs_C[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
   }
-  plot(C_liste, erreurs, type="l",xlab="C", ylab="Erreur")
-  C <- C_liste[which.min(erreurs)]
-  print(C)
+  plot(C_list, erreurs_C, type="l",xlab="C", ylab="Erreur")
+  C <- C_list[which.min(erreurs_C)]
 }else{
   C <- 3125
 }
 ```
+
+La valeur de C minimisant l'erreur est 3125.
 
 ## SVM à noyaux
 Les différents noyaux vont nous permettre de trouver des fontières de décision non linéaires.
@@ -148,15 +152,13 @@ L'idéal serait d'optimiser C pour différents noyaux. Cependant chaque noyau po
 ```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
-  degres <- 2:5 
-  erreurs <- rep(0, length(degres)) 
-  for (i in 1:length(degres)){
-    hyperparametres <- list(kernel="polydot", kpar=list(degree=degres[i]), C=C)
-    erreurs[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+  degres_list <- 2:5 
+  erreurs_degres <- rep(0, length(degres_list)) 
+  for (i in 1:length(degres_list)){
+    hyperparametres <- list(kernel="polydot", kpar=list(degree=degres_list[i]), C=C)
+    erreurs_degres[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
   }
-  plot(degres, erreurs, type="l",xlab="Degre", ylab="Erreur")
-  degre <- degres[which.min(erreurs)]
-  print(degre)
+  degre <- degres_list[which.min(erreurs_degres)]
 }else{
   degre <- 2
 }
@@ -167,21 +169,24 @@ Nous observons que le noyau polynomial n'améliore pas les performances de notre
 ```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
-  sigma <- seq(0.0001, 0.02, by=0.005)
-  erreurs <- rep(0, length(sigma)) 
-  for (i in 1:length(sigma)){
-    hyperparametres <- list(kernel="rbfdot", kpar=list(sigma=sigma[i]), C=C)
-    erreurs[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
+  sigma_list <- seq(0.0001, 0.02, by=0.005)
+  erreurs_sigma <- rep(0, length(sigma_list)) 
+  for (i in 1:length(sigma_list)){
+    hyperparametres <- list(kernel="rbfdot", kpar=list(sigma=sigma_list[i]), C=C)
+    erreurs_sigma[i] <- CV_eval('svc', astronomy_train, hyperparametres)[1]
   }
-  plot(sigma, erreurs, type="l",xlab="Sigma", ylab="Erreur")
-  sigma <- sigma[which.min(erreurs)]
-  print(sigma)
+  sigma <- sigma_list[which.min(erreurs_sigma)]
 }else{
   sigma <- 0.005
 }
 ```
 
-Nous observons que le noyau gaussien n'améliore pas non plus les perfomances par rapport à un noyau linéaire.
+De même le noyau gaussien n'améliore pas les perfomances par rapport à un noyau linéaire.
+
+```{r,echo=FALSE, out.width='.49\\linewidth', fig.height=3,fig.show='hold',fig.align='center'}
+plot(degres_list, erreurs_degres, type="l",xlab="Degre", ylab="Erreur")
+plot(sigma_list, erreurs_sigma, type="l",xlab="Sigma", ylab="Erreur")
+```
 
 ```{r, echo=FALSE}
 set.seed(123)
@@ -210,41 +215,36 @@ knitr::kable(res)
 
 Nous essayons maintenant les forêts aléatoires. 
 
-Nous devons tout d'abord nous assurer que notre fôret aléatoire contient suffisamment d'arbres. En effet, si le nombre d'arbres est trop faible certains individus ne seront pas utilisés (à cause du bootstrap). Si le nombre d'arbres est élévé la recherche de l'hyperparamètre 'mtry' (que faisons ensuite) sera très longue. Pour cela nous calculons l'erreur de classification par validation croisée pour des fôrets ayant entre 1 et 200 (par pas de 20).
+Nous devons tout d'abord nous assurer que notre fôret aléatoire contient suffisamment d'arbres. En effet, si le nombre d'arbres est trop faible certains individus ne seront pas utilisés (à cause du bootstrap). Si le nombre d'arbres est élévé la recherche de l'hyperparamètre 'mtry' (que nous faisons ensuite) sera très longue. Pour cela nous calculons l'erreur de classification par validation croisée pour des fôrets ayant entre 1 et 200 arbres (par pas de 20).
 
 ```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
-  ntree <- c(1, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200)
-  erreurs <- rep(0, length(ntree)) 
-  for (i in 1:length(ntree)){
-    hyperparametres <- list(ntree=ntree[i])
-    erreurs[i] <- CV_eval('rf', astronomy_train, hyperparametres)[1]
+  ntree_list <- c(1, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200)
+  erreurs_ntree <- rep(0, length(ntree_list)) 
+  for (i in 1:length(ntree_list)){
+    hyperparametres <- list(ntree=ntree_list[i])
+    erreurs_ntree[i] <- CV_eval('rf', astronomy_train, hyperparametres)[1]
   }
-  plot(ntree, erreurs, type="l",xlab="Nombre d'arbres", ylab="Erreur")
-  ntree <- ntree[which.min(erreurs)]
-  print(ntree)
+  ntree <- ntree_list[which.min(erreurs_ntree)]
 }else{
   ntree <- 160
 }
 ```
 
-
-Ensuite, nous avons un hyperparamètre à optimiser qui est 'mtry' dans la bibliothèque 'randomForest'. Cet hyperparamètre correspond au nombre de variables sélectionnées, par échantillonnage, comme candidates pour chaque noeud. Plus il y a de variables meilleure sera la séparation des données à cahque noeud mais les arbres seront similaires et donc l'agrégation des arbres améliorera peu les performances.
+Ensuite, nous avons un hyperparamètre à optimiser qui est 'mtry' dans la bibliothèque 'randomForest'. Cet hyperparamètre correspond au nombre de variables sélectionnées, par échantillonnage, comme candidates pour chaque noeud. Plus il y a de variables meilleure sera la séparation des données à chaque noeud mais les arbres seront similaires et donc l'agrégation des arbres améliorera peu les performances (par rapport à un arbre seul).
 
 ```{r, fig.height = 3, fig.width = 7, fig.align = "center", echo=FALSE}
 if (RECHERCHE_HYPERPARAMETRES){
   set.seed(123)
   nb_vars <- dim(astronomy_train)[2]-1
-  mtry <- 1:nb_vars
-  erreurs <- rep(0, nb_vars) 
+  mtry_list <- 1:nb_vars
+  erreurs_mtry <- rep(0, nb_vars) 
   for (i in 1:nb_vars){
-    hyperparametres <- list(mtry=mtry[i], ntree=ntree)
-    erreurs[i] <- CV_eval('rf', astronomy_train, hyperparametres)[1]
+    hyperparametres <- list(mtry=mtry_list[i], ntree=ntree)
+    erreurs_mtry[i] <- CV_eval('rf', astronomy_train, hyperparametres)[1]
   }
-  plot(mtry, erreurs, type="l",xlab="Nombre de variables", ylab="Erreur")
-  mtry <- which.min(erreurs)
-  print(mtry)
+  mtry <- mtry_list[which.min(erreurs_mtry)]
 }else{
   mtry <- 9
 }
@@ -259,6 +259,12 @@ res <- data.frame("Erreur"=rep(Inf,1), "Ecart type"=rep(Inf,1))
 hyperparametres <- list(ntree=ntree, mtry=mtry)
 res[1,] <- CV_eval('rf', astronomy_train, hyperparametres)
 ```
+
+```{r,echo=FALSE, out.width='.49\\linewidth', fig.height=3, fig.show='hold',fig.align='center'}
+plot(ntree_list, erreurs_ntree, type="l",xlab="Nombre d'arbres", ylab="Erreur")
+plot(mtry_list, erreurs_mtry, type="l",xlab="Nombre de variables", ylab="Erreur")
+```
+
 Nous obtenons l'erreur suivante:
 
 ```{r, echo=FALSE}
@@ -282,8 +288,10 @@ source(file="predicteurs.R")
 y_pred <- classifieur_astronomie(astronomy_test_X)
 ```
 Nous obtenons la matrice de confusion suivante sur le jeu de test:
-```{r, echo=FALSE}
+```{r, echo=FALSE, message=FALSE}
 library(caret)
+```
+```{r, echo=FALSE}
 cm <- confusionMatrix(data = y_pred, reference = astronomy_test_y)
 knitr::kable(cm$table)
 ```
