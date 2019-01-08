@@ -37,35 +37,33 @@ knitr::kable(res)
 Nous créons un vecteur contenant les étiquettes des données: 0 pour les voitures, 1 pour les chats, 2 pour les fleurs.
 ```{r}
 y <- c(rep(0, length(filenames_car)), rep(1, length(filenames_cat)), rep(2, length(filenames_flower)))
-length(y)
 ```
 
-## Séparation des données d'entrainement, de validation et de test
+##Séparation des données d'entrainement, de validation et de test
 Nous séparons les données en trois ensembles: entrainement valdiation et test. L'ensemble de validation va nous servir à faire un arrêt précoce: lorsque le réseau de neurones n'améliorera plus la précision sur l'ensemble de validation l'entrainement s'arrêtera. Cela permet de limiter le surentrainement. L'ensemble de test serivara à caluler une estimation de l'erreur de classification non biaisée.
 
 ```{r}
 set.seed(123)
+
 filenames <- c(filenames_car, filenames_cat, filenames_flower)
-size_training <- floor(0.6*length(filenames))
-size_validation <- floor(0.2*length(filenames))
-size_test <- length(filenames) - size_training - size_validation
-sample_train <- sample(1:length(filenames), size = size_training)
-filenames_train <- filenames[sample_train]
-y_train <- y[sample_train]
-sample_val <- sample((1:length(filenames))[-sample_train], size = size_validation)
-filenames_val <- filenames[sample_val]
-y_val <- y[sample_val]
-c(length(filenames_train), length(y_train), length(filenames_val), length(y_val))
+
+idx <- sample(seq(1, 3), size = length(filenames), replace = TRUE, prob = c(.6, .2, .2))
+filenames_train <- filenames[idx == 1]
+filenames_val <- filenames[idx == 2]
+filenames_test <- filenames[idx == 3]
+y_train <- y[idx == 1]
+y_val <- y[idx == 2]
+y_test <- y[idx == 3]
 ```
 
 ## Transformation des données
 Nous utilisons les pixels comme variables d'entrée et donc nous n'avons pas besoin d'extraire des caractéristiques de l'image. Cependant toutes les images n'ont pas la même taille nous réalisons donc une interpolation bilinéaire pour que toutes les images aient la même taille. Nous avons choisi une taille de 100x100.
 
-```{r}
+```{r, echo=FALSE}
 read_images <- function(list_files, dim_images){
   images <- array(0, dim=c(length(list_files), dim_images[1], dim_images[2], 3))
   for (i in 1:length(list_files)){
-    images[i,,,] <- image_to_array(image_load(path=list_files[i], target_size=dim_images, interpolation = "bilinear"))
+    images[i,,,] <- image_to_array(image_load(path=list_files[i], target_size=dim_images, interpolation="bilinear"))
   }
   return(images)
 }
@@ -75,15 +73,13 @@ read_images <- function(list_files, dim_images){
 dim_images <- c(100, 100)
 images_train <- read_images(filenames_train, dim_images)
 images_val <- read_images(filenames_val, dim_images)
-dim(images_train)
-dim(images_val)
 ```
 
-# Modèle
+#Modèle
 
 Notre modèle est un réseau de neurones convolutif. Ce type de modèle est adapté aux images puisque de part sa construction il prend en compte l'invariance aux transaltions des images.
 
-Les images en entrées ont les dimensions: 100x100x3 (Hauteur x Largeur x Nombre de couleurs). Ensuite nous appliquons des convolutions jusqu'à obtenir un vecteur de taille 2x2x64 que nous "applatissons" en un vecteur de taille 256. Chaque convolution a un filtre de taille 3x3 (pour chaque carte de caractéristique en entrée et en sortie). Nous choisissons de réduire la hauteur et la largeur des cartes de caractéristiques uniquement avec le pas des convolution (donc nous n'utilisons pas de pooling et mettons systématiquement du padding). Chaque convolution est suivi d'une activation 'relu' pour mettre de la non-linéarité. Le nombre de carte de caractéristiques est augmenté progressivement de 3 cartes (pour les 3 couleurs) jusqu'à 64 de façpn à extraire de plus en plus d'informations au fur et à mesure.
+Les images en entrées ont les dimensions: 100x100x3 (Hauteur x Largeur x Nombre de couleurs). Ensuite nous appliquons des convolutions jusqu'à obtenir un vecteur de taille 2x2x64 que nous "applatissons" en un vecteur de taille 256. Chaque convolution a un filtre de taille 3x3 (pour chaque carte de caractéristique en entrée et en sortie). Nous choisissons de réduire la hauteur et la largeur des cartes de caractéristiques uniquement avec le pas des convolution (donc nous n'utilisons pas de pooling et mettons systématiquement du padding). Chaque convolution est suivi d'uneactivation 'relu' pour mettre de la non-linéarité. Le nombre de carte de caractéristiques est augmenté progressivement de 3 cartes (pour les 3 couleurs) jusqu'à 64 de façpn à extraire de plus en plus d'informations au fur et à mesure.
 
 Ensuite nous passons le vecteur de taille 256 dans 2 couches entièrement connectées. La dernière couche entièrement connectée est suivie d'un softmax. Le modèle est entrainé par minimisation de l'entropie croisée ce qui revient à la maximisation du maximum de vraisemblance de notre modèle.
 
@@ -96,43 +92,38 @@ model <- keras_model_sequential()
 
 model %>%
    layer_conv_2d(
-    filter = 16, kernel_size = c(3,3), padding = "same", strides = c(2, 2), input_shape = c(dim_images[1], dim_images[2], 3) , activation = "relu"
+    filter=16,kernel_size=c(3,3),padding="same",strides=c(2, 2), input_shape = c(dim_images[1], dim_images[2], 3) ,activation="relu"
   ) %>%
-  layer_conv_2d(filter = 16, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filter=16,kernel_size=c(3,3),padding="same",activation="relu") %>%
 
-  layer_conv_2d(filter = 16, kernel_size = c(3,3), padding = "same", strides = c(2, 2), activation = "relu") %>%
-  layer_conv_2d(filter = 16, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filter=16,kernel_size=c(3,3),padding="same",strides=c(2, 2),activation="relu") %>%
+  layer_conv_2d(filter=16,kernel_size=c(3,3),padding="same",activation="relu") %>%
   layer_dropout(0.5) %>%
   
-  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same", strides = c(2, 2), activation = "relu") %>%
-  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filter=32,kernel_size=c(3,3),padding="same",strides=c(2, 2),activation="relu") %>%
+  layer_conv_2d(filter=32,kernel_size=c(3,3),padding="same",activation="relu") %>%
 
-  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same", strides = c(2, 2), activation = "relu") %>%
-  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filter=32,kernel_size=c(3,3),padding="same",strides=c(2, 2),activation="relu") %>%
+  layer_conv_2d(filter=32,kernel_size=c(3,3),padding="same",activation="relu") %>%
   layer_dropout(0.5) %>%
   
-  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same", strides = c(2, 2), activation = "relu") %>%
-  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filter=64,kernel_size=c(3,3),padding="same",strides=c(2, 2),activation="relu") %>%
+  layer_conv_2d(filter=64,kernel_size=c(3,3),padding="same",activation="relu") %>%
 
-  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same", strides = c(2, 2), activation = "relu") %>%
-  layer_conv_2d(filter = 64, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filter=64,kernel_size=c(3,3),padding="same",strides=c(2, 2),activation="relu") %>%
+  layer_conv_2d(filter=64,kernel_size=c(3,3),padding="same",activation="relu") %>%
 
   layer_flatten() %>%
   layer_dropout(0.5) %>%
   
-  layer_dense(64, activation="relu") %>%
+  layer_dense(64,activation="relu") %>%
   layer_dropout(0.5) %>%
   
-  layer_dense(3, activation="softmax")
+  layer_dense(3,activation="softmax")
 
 opt <- optimizer_adam(lr = 0.001)
 
-model %>% compile(
-  loss = "sparse_categorical_crossentropy",
-  optimizer = opt,
-  metrics = "accuracy"
-)
-summary(model)
+model %>% compile(loss="sparse_categorical_crossentropy",optimizer=opt,metrics="accuracy")
 ```
 
 ## Entrainement
@@ -140,16 +131,34 @@ Nous entrainons notre modèle avec des lots de 30.
 
 ```{r}
 early_stopping <- callback_early_stopping(monitor = 'val_acc', patience = 10)
-history <- model %>% fit(
-  images_train, y_train,
-  batch_size = 30,
-  epochs = 60,
-  validation_data = list(images_val, y_val),
-  shuffle = TRUE,
-  callbacks = c(early_stopping)
-)
+history <- model %>% fit(images_train,y_train,batch_size=30,epochs=60,
+                         validation_data=list(images_val, y_val),shuffle=TRUE,
+                         callbacks=c(early_stopping),verbose=0)
 ```
+
+#Evaluation de l'erreur sur l'ensemble de test
+
+Nous évaluons l’erreur sur l’ensemble de test (réservé à cet effet au départ): cette erreur nous donne une estimation non biaisée de l'erreur de classification.
 ```{r}
-plot(history)
+model %>% save_model_hdf5("env_images.h5")
 ```
+
+```{r}
+rm(list=setdiff(ls(), c("filenames_test", "y_test")))
+source(file="predicteurs.R")
+y_pred <- classifieur_images(filenames_test)
+```
+
+Nous obtenons la matrice de confusion suivante sur le jeu de test:
+```{r, echo=FALSE}
+y_test[y_test==0] <- 'car'
+y_test[y_test==1] <- 'cat'
+y_test[y_test==2] <- 'flower'
+library(caret)
+cm <- confusionMatrix(data = y_pred, reference = as.factor(y_test))
+knitr::kable(cm$table)
+#print(sum(y_test!=y_pred)/length(y_test))
+```
+
+La précision est de 92% sur l'ensemble de test.
 
