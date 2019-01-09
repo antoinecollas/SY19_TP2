@@ -140,7 +140,7 @@ history <- model %>% fit(images_train,y_train,batch_size=30,epochs=60,
 
 Nous évaluons l’erreur sur l’ensemble de test (réservé à cet effet au départ): cette erreur nous donne une estimation non biaisée de l'erreur de classification.
 ```{r}
-model %>% save_model_hdf5("env_images.h5")
+model %>% save_model_hdf5("model.h5")
 ```
 
 ```{r}

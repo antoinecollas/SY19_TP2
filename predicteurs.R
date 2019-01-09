@@ -9,7 +9,7 @@ classifieur_astronomie <- function(dataset){
 
 library(keras)
 classifieur_images <- function(list) {
-  model <- load_model_hdf5("env_images.h5")  
+  model <- load_model_hdf5("model.h5")  
   n<-length(list)
   dim_images <- c(100,100)
   z <- rep(0, length(list))
