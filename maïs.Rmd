@@ -1,8 +1,8 @@
 ---
 title: "TP7 Khalis - Mekkoudi - Collas"
 output: 
-  html_notebook: default
   pdf_document: default
+  html_notebook: default
 ---
 
 
@@ -13,6 +13,15 @@ source("functions.R")
 data <- read.table(file = "../TP7-SY19/data/mais_train.csv", sep=',', header = T)
 data$X <- NULL
 RECHERCHE_HYPERPARAMETRE <- FALSE
+```
+
+## Chargement des librairies
+```{r, echo=FALSE, message=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(randomForest)
+library(keras)
 ```
 
 
@@ -60,11 +69,6 @@ L'erreur quadratique moyenne ne s'est que faiblement amélioré, nous avons par co
 
 Comme pour le dataset astronomy, nous optimisons dans un premier temps le nombre d'arbre à utiliser en gardant le paramètre mtry fixe (ici p/3). L'erreur est calculé grâce au paramètre "out of bag error" qui est retourné par la fonction "randomForest".
 ```{r}
-library(tidyr)
-library(dplyr)
-library(ggplot2)
-library(randomForest)
-
 scaled_test <- data.frame(t(apply(mais_test[,-which(names(mais_test)=="yield_anomaly")], 1, function(r)(r - centers) / scales )))
 
 rf <- randomForest(
@@ -109,6 +113,8 @@ if(RECHERCHE_HYPERPARAMETRE) {
     test.err[mtry]= rf$test$mse[nbtree]
   }
   
+} else {
+  load("env_mais.RData")
 }
 tibble::tibble(
   `Out of Bag Error` = oob.err,
@@ -195,7 +201,6 @@ Le noyau polynomial n'offre quant à lui, pas un bon niveau de performance.
 Nous construisons un perceptron avec une couche cachée et 5 neurones dans cette dernière.
 Avec un nombre de neurones supérieur, notre réseau "surapprend" nos données d'entrainement. Il nous faudrait plus de données pour palier à ce problème étant donné le nombre élevé de variables.
 ```{r}
-library(keras)
 build_model <- function() {
   model <- keras_model_sequential() 
   model %>% layer_dense(units = 5, activation = 'relu', input_shape = ncol(mais_train)-1) %>%
@@ -206,11 +211,9 @@ build_model <- function() {
 
 
 model <- build_model()
-model %>% summary()
-
 ```
 
-```{r}
+```{r, message=FALSE}
 early_stop <- callback_early_stopping(monitor = "val_loss", patience = 20)
 
 epochs <- 100
