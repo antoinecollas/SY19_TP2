@@ -1,0 +1,251 @@
+---
+title: "TP7 Khalis - Mekkoudi - Collas"
+output: 
+  html_notebook: default
+  pdf_document: default
+---
+
+
+# Maïs
+## Chargement des donnéés et des fonctions
+```{r}
+source("functions.R")
+data <- read.table(file = "../TP7-SY19/data/mais_train.csv", sep=',', header = T)
+data$X <- NULL
+RECHERCHE_HYPERPARAMETRE <- FALSE
+```
+
+
+## Séparation des données en entrainement/test 
+```{r}
+set.seed(40)
+t_size <- floor(2/3 * nrow(data))
+t <- sample(1:nrow(data), t_size)
+mais_train <- data[t,]
+mais_test <- data[-t,]
+```
+
+Comme précédemment, nous centrons réduisons nos données car elles ont des ordres de grands très différents.
+```{r}
+scaled_data <- scale(mais_train[,-which(names(mais_train)=="yield_anomaly")], center = TRUE, scale = TRUE)
+centers <- attr(scaled_data, 'scaled:center')
+scales <- attr(scaled_data, 'scaled:scale')
+mais_train <- cbind(data.frame(scaled_data)[,1], mais_train[,which(names(mais_train)=="yield_anomaly")], data.frame(scaled_data)[, 2:ncol(scaled_data)])
+colnames(mais_train)[1] <- "year_harvest"
+colnames(mais_train)[2] <- "yield_anomaly"
+```
+
+# Régression linéaire
+Nous commençons par une régression linéaire, une méthode qui de par sa simplicité permet une meilleure interprétation. 
+
+Nous effectuons une "forward stepwise selection" et pour chaque modèle nous évaluons l'erreur grâce à une k-fold cross-validation.
+Le meilleur modèle correspond à celui comprenant les 38 premières variables sélectionnées
+
+```{r}
+res <- ForwardCrossValidationLM(mais_train)
+mais.mod <- lm(as.formula(paste("yield_anomaly ~", paste(res$vars[1:which.min(res$CV)],collapse="+"))),data=mais_train)
+plot(res$CV, xlab="number of variables", ylab="cv error", type="b")
+```
+La régression linéaire ainsi que d'autres modèles linéaires tel que la régression Lasso n'arrivent pas à produire de meilleurs résultats.
+Nous avons opéré des transformations afin d'obtenir un modèle non linéaire en: 
+  - multipliant les variables par rapport à elle même
+  - multipliant les variables par rapports aux autres du même mois
+  - transformant la variable qui correspond au département en plusieurs variables binaires afin d'éliminer la relation d'ordre entre les départements (à priori, il n'y a pas de relation linéaire entre le numéro de département et le rendement de maïs)
+L'erreur quadratique moyenne ne s'est que faiblement amélioré, nous avons par conséquent écarté ses pistes.
+
+
+# Forêts aléatoires
+
+## Optimisation du nombre d'arbre
+
+Comme pour le dataset astronomy, nous optimisons dans un premier temps le nombre d'arbre à utiliser en gardant le paramètre mtry fixe (ici p/3). L'erreur est calculé grâce au paramètre "out of bag error" qui est retourné par la fonction "randomForest".
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(randomForest)
+
+scaled_test <- data.frame(t(apply(mais_test[,-which(names(mais_test)=="yield_anomaly")], 1, function(r)(r - centers) / scales )))
+
+rf <- randomForest(
+  formula = yield_anomaly ~ .,
+  data = mais_train,
+  xtest = scaled_test, 
+  ytest = mais_test$yield_anomaly,
+  ntree = 1000
+  )
+tibble::tibble(
+  `Out of Bag Error` = rf$mse,
+  `Test error` = rf$test$mse,
+  ntrees = 1:rf$ntree
+) %>%
+  gather(Metric, MSE, -ntrees) %>%
+  ggplot(aes(ntrees, MSE, color = Metric)) +
+  geom_line() +
+  scale_y_continuous() +
+  xlab("Number of trees")
+nbtree <- which.min(rf$mse)
+cat("Nombre d'arbres optimal: ",nbtree)
+```
+
+## Optimisation de 'mtry'
+
+```{r}
+
+if(RECHERCHE_HYPERPARAMETRE) {
+  oob.err <- numeric(length(mais_train)-1)
+  test.err <- numeric(length(mais_train)-1)
+  
+  for(mtry in 1:(length(mais_train)-1)) {
+    rf <- randomForest(
+      yield_anomaly ~ .,
+      data = mais_train,
+      mtry=mtry,
+      xtest = scaled_test, 
+      ytest = mais_test$yield_anomaly,
+      ntree=nbtree
+      )
+    oob.err[mtry]= rf$mse[nbtree]
+    test.err[mtry]= rf$test$mse[nbtree]
+  }
+  
+}
+tibble::tibble(
+  `Out of Bag Error` = oob.err,
+  `Test error` = test.err,
+  mtries = 1:(length(mais_train)-1)
+) %>%
+  gather(Metric, MSE, -mtries) %>%
+  ggplot(aes(mtries, MSE, color = Metric)) +
+  geom_line() +
+  scale_y_continuous() +
+  xlab("Mtry")
+mtry <- which.min(oob.err)
+cat("Paramètre mtry optimal: ", mtry)
+```
+
+
+# SVM à noyau
+
+## Noyau linéaire
+
+Comme dit dans l'exercice précédent, pour des raisons de temps calculs nous choisirons d'optimiser le paramètre C uniquement avec le noyau linéaire.
+
+Nous faisons varier ce paramètre et le calcul de l'erreur se fait par validation croisée
+```{r}
+library('kernlab')
+
+if(RECHERCHE_HYPERPARAMETRE){
+  C <- (1:5)^5
+  CV1 <- numeric(length(C)) # [1] 0.7318539 0.7338461 0.7423543 0.8082920 1.0046964
+  
+  for (c in 1:length(C)) {
+    svmfit <- ksvm(yield_anomaly ~ .,data = mais_train, scaled=TRUE, type="eps-svr",
+    kernel="vanilladot", C=C[c], cross=10)
+    CV1[c] <- cross(svmfit)
+  }
+  c <- C[which.min(CV1)] #1
+} else {
+  c <- 1
+}
+```
+Le paramètre C optimal trouvé vaut 1 et l'erreur est d'environ 0.73.
+
+## Noyau gaussion
+
+Nous faisons de même ici avec le paramètre sigma
+```{r}
+
+if(RECHERCHE_HYPERPARAMETRE) {
+  Sigma <- seq(0.0001, 0.0401, by=0.005)
+  CV <- numeric(length(Sigma)) # [1] 0.8649978 0.6319195 0.5883565 0.5764376 0.5767431 0.5762012 0.5819445 0.5748510 0.5815259
+  
+  for(s in 1:length(Sigma)) {
+    svmfit <- ksvm(yield_anomaly ~ .,data = mais_train, scaled=TRUE, type="eps-svr",
+    kernel="rbfdot", kpar=list(sigma=Sigma[s]), C=c, cross=10)
+    CV[s] <- cross(svmfit)
+  }
+  s <- Sigma[which.min(CV)]
+} else {
+  s <- 0.0351
+}
+```
+La valeur optimal trouvée 0.0351 et l'erreur estimée vaut 0.57
+
+
+## Noyau polynomial
+
+```{r}
+if(RECHERCHE_HYPERPARAMETRE) {
+  degree <- 2:5
+  CV <- numeric(length(degree)) # [1] 3.226894 1.162719 1.394694 2.193799
+  for(d in 1:length(degree)) {
+    svmfit <- ksvm(yield_anomaly ~ .,data = mais_train, scaled=TRUE, type="eps-svr",
+    kernel="polydot", kpar=list(degree=degree[d]), C=c, cross=10)
+    CV[d] <- cross(svmfit)
+  }
+  d <- degree[which.min(CV)] # 3
+} else {
+  d <- 3
+}
+```
+Le noyau polynomial n'offre quant à lui, pas un bon niveau de performance.
+
+# Réseau de neurone : construction d'un perceptron
+Nous construisons un perceptron avec une couche cachée et 5 neurones dans cette dernière.
+Avec un nombre de neurones supérieur, notre réseau "surapprend" nos données d'entrainement. Il nous faudrait plus de données pour palier à ce problème étant donné le nombre élevé de variables.
+```{r}
+library(keras)
+build_model <- function() {
+  model <- keras_model_sequential() 
+  model %>% layer_dense(units = 5, activation = 'relu', input_shape = ncol(mais_train)-1) %>%
+    layer_dense(units = 1, name="sortie")
+  
+  model %>% compile(loss = 'mean_squared_error', optimizer = optimizer_rmsprop())
+}
+
+
+model <- build_model()
+model %>% summary()
+
+```
+
+```{r}
+early_stop <- callback_early_stopping(monitor = "val_loss", patience = 20)
+
+epochs <- 100
+
+# Fit the model and store training stats
+history <- model %>% fit(
+  as.matrix(mais_train[,-which(names(mais_test)=="yield_anomaly")]),
+  mais_train$yield_anomaly,
+  epochs = epochs,
+  validation_split = 0.2,
+  verbose=0,
+  callbacks = list(early_stop)
+)
+```
+
+```{r}
+plot(history)
+min(history$metrics$val_loss)
+```
+L'erreur se trouve aux alentours 0.75. Afin de réduire la dimension de notre dataset, nous avons tenté d'utiliser seulement les variables les plus importantes de la forêt aléatoire, nous avons obtenu un taux d'erreur similaire en utilisant plus de neurones.
+
+
+#Modèle retenu
+Le modèle retenu est le SVM avec un noyau gaussien, il semble posséder la plus faible erreur même si la forêt aléatoire possède également de bonnes performances.
+Nous évaluons également l'erreur sur l'ensemble de test.
+```{r}
+mais.mod <- ksvm(yield_anomaly ~ .,data = mais_train, scaled=TRUE, type="eps-svr", kernel="rbfdot", kpar=list(sigma=0.0351), C=1)
+save(oob.err,test.err,centers, scales, mais.mod, file="env_mais.RData")
+```
+
+```{r}
+source(file="predicteurs.R")
+pred <- rendement_mais(mais_test[,-which(names(mais_test)=="yield_anomaly")])
+mse <- mean((pred - mais_test$yield_anomaly)^2)
+cat("erreur: ", mse)
+```
+
+Nous obtenons une erreur d'environ 0.52 sur notre ensemble de test.

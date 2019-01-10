@@ -24,3 +24,11 @@ classifieur_images <- function(list) {
   z[z==3] <- 'flower'
   return(as.factor(z))
 }
+
+rendement_mais <- function(dataset) {
+  load("env_mais.RData")
+  dataset$X <- NULL
+  scaled_dataset <- t(apply(dataset, 1, function(r)(r - centers) / scales ))
+  z <- predict(mais.mod, scaled_dataset)
+  return(z)
+}
