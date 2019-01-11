@@ -84,8 +84,8 @@ optimizeMtryAndPlotResults <- function(){
     load("env_mais.RData")
   }
   tibble::tibble(
-    `Out of Bag Error` = oob.err,
-    `Test error` = test.err,
+    'Out of Bag Error' = oob.err,
+    'Test error' = test.err,
     mtries = 1:(length(mais_train)-1)
   ) %>%
     gather(Metric, MSE, -mtries) %>%
@@ -94,7 +94,7 @@ optimizeMtryAndPlotResults <- function(){
     scale_y_continuous() +
     xlab("Mtry")
   mtry <- which.min(oob.err)
-  cat("Paramètre mtry optimal: ", mtry)
+  cat("Param?tre mtry optimal: ", mtry)
   
   res <- NULL
   res$mtry <- mtry
@@ -112,8 +112,8 @@ optimizeNtreeAndPlotResults <- function() {
     ntree = 1000
   )
   tibble::tibble(
-    `Out of Bag Error` = rf$mse,
-    `Test error` = rf$test$mse,
+    'Out of Bag Error' = rf$mse,
+    'Test error' = rf$test$mse,
     ntrees = 1:rf$ntree
   ) %>%
     gather(Metric, MSE, -ntrees) %>%
