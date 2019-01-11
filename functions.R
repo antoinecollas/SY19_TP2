@@ -34,3 +34,95 @@ ForwardCrossValidationLM <- function(data){
   res$vars <- varsres
   return(res)
 }
+
+build_model <- function() {
+  model <- keras_model_sequential() 
+  model %>% layer_dense(units = 5, activation = 'relu', input_shape = ncol(mais_train)-1) %>%
+    layer_dense(units = 1, name="sortie")
+  
+  model %>% compile(loss = 'mean_squared_error', optimizer = optimizer_rmsprop())
+}
+
+build_perceptron <- function() {
+  
+  model <- build_model()
+  early_stop <- callback_early_stopping(monitor = "val_loss", patience = 20)
+  
+  epochs <- 100
+  
+  # Fit the model and store training stats
+  history <- model %>% fit(
+    as.matrix(mais_train[,-which(names(mais_test)=="yield_anomaly")]),
+    mais_train$yield_anomaly,
+    epochs = epochs,
+    validation_split = 0.2,
+    verbose=0,
+    callbacks = list(early_stop)
+  )
+  return(history)
+}
+
+optimizeMtryAndPlotResults <- function(){
+  if(RECHERCHE_HYPERPARAMETRE) {
+    oob.err <- numeric(length(mais_train)-1)
+    test.err <- numeric(length(mais_train)-1)
+    
+    for(mtry in 1:(length(mais_train)-1)) {
+      rf <- randomForest(
+        yield_anomaly ~ .,
+        data = mais_train,
+        mtry=mtry,
+        xtest = scaled_test, 
+        ytest = mais_test$yield_anomaly,
+        ntree=nbtree
+      )
+      oob.err[mtry]= rf$mse[nbtree]
+      test.err[mtry]= rf$test$mse[nbtree]
+    }
+    
+  } else {
+    load("env_mais.RData")
+  }
+  tibble::tibble(
+    `Out of Bag Error` = oob.err,
+    `Test error` = test.err,
+    mtries = 1:(length(mais_train)-1)
+  ) %>%
+    gather(Metric, MSE, -mtries) %>%
+    ggplot(aes(mtries, MSE, color = Metric)) +
+    geom_line() +
+    scale_y_continuous() +
+    xlab("Mtry")
+  mtry <- which.min(oob.err)
+  cat("Paramètre mtry optimal: ", mtry)
+  
+  res <- NULL
+  res$mtry <- mtry
+  res$oob.err <- oob.err
+  res$test.err <- test.err
+  return(res)
+}
+
+optimizeNtreeAndPlotResults <- function() {
+  rf <- randomForest(
+    formula = yield_anomaly ~ .,
+    data = mais_train,
+    xtest = scaled_test, 
+    ytest = mais_test$yield_anomaly,
+    ntree = 1000
+  )
+  tibble::tibble(
+    `Out of Bag Error` = rf$mse,
+    `Test error` = rf$test$mse,
+    ntrees = 1:rf$ntree
+  ) %>%
+    gather(Metric, MSE, -ntrees) %>%
+    ggplot(aes(ntrees, MSE, color = Metric)) +
+    geom_line() +
+    scale_y_continuous() +
+    xlab("Number of trees")
+  nbtree <- which.min(rf$mse)
+  cat("Nombre d'arbres optimal: ",nbtree)
+  
+  return(nbtree)
+}

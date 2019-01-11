@@ -25,7 +25,7 @@ classifieur_images <- function(list) {
   return(as.factor(z))
 }
 
-rendement_mais <- function(dataset) {
+classifieur_ble <- function(dataset) {
   load("env_mais.RData")
   dataset$X <- NULL
   scaled_dataset <- t(apply(dataset, 1, function(r)(r - centers) / scales ))
